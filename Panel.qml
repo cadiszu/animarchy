@@ -1315,9 +1315,11 @@ Panel {
               spacing: Style.space(8)
 
               Button {
-                text: "⏮ Prev"
-                foreground: root.fg
+                text: "⏮"
+                foreground: Color.accent
+                fontSize: Style.font.iconLarge
                 width: (parent.width - parent.spacing) / 2
+                tooltipText: "Previous episode"
                 // Disabled while a stream is resolving: the helper runs one
                 // lookup at a time, so clicks then would be swallowed.
                 enabled: !root.playingEpisode
@@ -1326,9 +1328,11 @@ Panel {
               }
 
               Button {
-                text: "Next ⏭"
-                foreground: root.fg
+                text: "⏭"
+                foreground: Color.accent
+                fontSize: Style.font.iconLarge
                 width: (parent.width - parent.spacing) / 2
+                tooltipText: "Next episode"
                 enabled: !root.playingEpisode
                 opacity: root.playingEpisode ? 0.5 : 1
                 onClicked: root.nextEpisode()
