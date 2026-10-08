@@ -74,6 +74,11 @@ BarWidget {
 
     onPressed: function(b) {
       if (b === Qt.RightButton) {
+        // Without ani-cli there's nothing to resume: open the panel instead
+        // so the install banner is visible. Panel may still be loading, in
+        // which case fall through to the direct launch attempt.
+        var panel = panelLoader.item
+        if (panel && panel.aniCliPresent === false) { root.open(); return }
         if (!launchProcess.running) launchProcess.running = true
       } else {
         root.togglePanel()

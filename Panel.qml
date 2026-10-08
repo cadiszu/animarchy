@@ -54,6 +54,7 @@ Panel {
   // probe once at startup and only pass flags we can actually honour.
   property bool probeDone: false
   property bool aniSkipPresent: false
+  property bool aniCliPresent: false
   property int depRefreshAttempts: 0
 
   readonly property color fg: Color.popups.text
@@ -218,6 +219,7 @@ Panel {
   function browseSearch() {
     var q = searchField.text.trim()
     if (q === "") { statusText = "Type an anime name…"; return }
+    if (!root.aniCliPresent) { statusText = "ani-cli is not installed."; return }
     root.activeTab = 0
     root.searching = true
     root.searchResults = []
@@ -248,6 +250,7 @@ Panel {
   }
 
   function playEpisode(ep) {
+    if (!root.aniCliPresent) { statusText = "ani-cli is not installed."; return }
     nowPlayingTitle = root.selectedAnimeTitle
     nowPlayingEp = ep
     nowPlayingAnimeId = root.selectedAnimeId
@@ -302,6 +305,7 @@ Panel {
   }
 
   function continueWatching() {
+    if (!root.aniCliPresent) { open(); statusText = "ani-cli is not installed."; return }
     var args = optionArgs()
     args.push("-c")
     launch(args)
@@ -337,6 +341,7 @@ Panel {
     statusText = ""
     refreshHistory()
     if (!aniSkipProbe.running) aniSkipProbe.running = true
+    if (!aniCliProbe.running) aniCliProbe.running = true
     Qt.callLater(function() { searchField.forceActiveFocus() })
   }
 
@@ -360,6 +365,12 @@ Panel {
       root.aniSkipPresent = code === 0
       root.probeDone = true
     }
+  }
+
+  Process {
+    id: aniCliProbe
+    command: ["sh", "-c", "command -v ani-cli"]
+    onExited: function(code) { root.aniCliPresent = code === 0 }
   }
 
   // Launches a native directory picker and records the chosen folder.
@@ -446,6 +457,7 @@ Panel {
 
   Component.onCompleted: {
     aniSkipProbe.running = true
+    aniCliProbe.running = true
   }
 
   // Re-probe in the background after an install launch, until both helpers show
@@ -457,12 +469,13 @@ Panel {
     running: false
     onTriggered: {
       root.depRefreshAttempts++
-      if (root.aniSkipPresent || root.depRefreshAttempts >= 20) {
+      if ((root.aniSkipPresent && root.aniCliPresent) || root.depRefreshAttempts >= 20) {
         depRefresh.stop()
         root.depRefreshAttempts = 0
         return
       }
       if (!aniSkipProbe.running) aniSkipProbe.running = true
+      if (!aniCliProbe.running) aniCliProbe.running = true
     }
   }
 
@@ -565,6 +578,28 @@ Panel {
           }
 
           PanelSeparator { width: parent.width }
+
+          Column {
+            visible: !root.aniCliPresent
+            width: parent.width
+            spacing: Style.space(6)
+
+            Text {
+              width: parent.width
+              text: "ani-cli is not installed. Search, playback, and history need it."
+              color: root.fg
+              font.family: root.ff
+              font.pixelSize: Style.font.body
+              wrapMode: Text.WordWrap
+            }
+
+            Button {
+              text: "Install ani-cli"
+              iconText: "\uf019"
+              foreground: root.fg
+              onClicked: root.installPackage("ani-cli")
+            }
+          }
 
           TextField {
             id: searchField

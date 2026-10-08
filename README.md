@@ -20,6 +20,8 @@ An Omarchy bar plugin for [ani-cli](https://github.com/pystardust/ani-cli): sear
 - `python3` ( powers the search/episode resolver)
 - Optional: `ani-skip` (Skip intro toggle), `zenity` (folder Browse button), `yt-dlp`/`ffmpeg` (ani-cli downloads)
 
+If `ani-cli` itself is missing, the popup shows an **Install ani-cli** button that installs it via `omarchy pkg aur add ani-cli`.
+
 ## Install
 
 ```bash
