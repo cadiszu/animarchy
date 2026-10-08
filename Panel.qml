@@ -1315,9 +1315,9 @@ Panel {
               spacing: Style.space(8)
 
               Button {
-                text: "⏮"
+                iconText: "\uf048"
                 foreground: Color.accent
-                fontSize: Style.font.iconLarge
+                iconSize: Style.font.iconLarge
                 width: (parent.width - parent.spacing) / 2
                 tooltipText: "Previous episode"
                 // Disabled while a stream is resolving: the helper runs one
@@ -1328,9 +1328,9 @@ Panel {
               }
 
               Button {
-                text: "⏭"
+                iconText: "\uf051"
                 foreground: Color.accent
-                fontSize: Style.font.iconLarge
+                iconSize: Style.font.iconLarge
                 width: (parent.width - parent.spacing) / 2
                 tooltipText: "Next episode"
                 enabled: !root.playingEpisode
