@@ -48,13 +48,11 @@ Panel {
   property string nowPlayingEp: ""
   property bool showSettings: false
   property int activeTab: 0
-  // Background episode-list refresh for the now-playing title (started by a
-  // history resume, which plays the saved episode immediately). When it
-  // arrives, the grid and the Prev/Next order upgrade to the full list.
-  // Empty when no refresh is in flight.
-  property string historyListLoadId: ""
   // Pending Prev/Next step waiting on an episode-list reload.
   property int pendingStep: 0
+  // Anime id the in-flight grid load belongs to. A stale arrival after
+  // navigating elsewhere is dropped, never applied to the wrong title.
+  property string loadingEpisodesId: ""
   // True when nowPlayingEpisodes holds the complete list rather than the
   // single-episode stub used to start playback instantly.
   property bool nowPlayingFullList: false
@@ -256,7 +254,11 @@ Panel {
     root.episodeList = []
     root.episodeView = []
     root.loadingEpisodes = true
+    root.loadingEpisodesId = id
     root.statusText = "Loading episodes…"
+    // A previous load still flying is stale: stop it so its late arrival
+    // can't overwrite this one (its death notice self-heals below).
+    if (episodesProc.running) episodesProc.running = false
     episodesProc.command = ["python3", root.helperPath, "episodes", id]
     episodesProc.running = true
   }
@@ -297,10 +299,9 @@ Panel {
         root.statusText = "Episode list isn't loaded. Open the episode grid (☰) first."
         return
       }
-      if (episodesProc.running || episodesBgProc.running) {
-        // A load is already flying: queue the step if it belongs to the
-        // now-playing title (a mismatch is dropped on arrival, never
-        // applied to the wrong list).
+      if (episodesProc.running) {
+        // A load is already flying: queue the step (a mismatch is dropped
+        // on arrival, never applied to the wrong list).
         if (root.nowPlayingAnimeId !== "") root.pendingStep = delta
         return
       }
@@ -311,7 +312,9 @@ Panel {
       root.episodeList = []
       root.episodeView = []
       root.loadingEpisodes = true
+      root.loadingEpisodesId = root.nowPlayingAnimeId
       root.statusText = "Loading episodes…"
+      if (episodesProc.running) episodesProc.running = false
       episodesProc.command = ["python3", root.helperPath, "episodes", root.nowPlayingAnimeId]
       episodesProc.running = true
       return
@@ -372,24 +375,29 @@ Panel {
     launch(args)
   }
 
-  // Resume a history row: plays the saved episode immediately and stays on
-  // this tab. The full episode list loads in the background so Prev/Next
-  // can step (and the Search-tab grid fills in when it arrives).
+  // Resume a history row: plays the saved episode immediately and opens that
+  // title's episode grid (same loader as picking a search result), so the
+  // grid fills in and Prev/Next steps through the full order.
   function playFromHistory(entry) {
     if (!entry || !entry.id || !entry.episode) return
     root.pendingStep = 0
+    root.activeTab = 0
     root.selectedAnimeId = entry.id
     root.selectedAnimeTitle = entry.title
+    // Instant playback off a stub so the saved episode starts at once…
     root.episodeList = [{ id: "", ep: entry.episode }]
     root.episodeView = root.episodeList
     root.playEpisode(entry.episode, false)
-    // Full list follows on a separate process so grid loads never stall.
-    // Skipped if one is already flying; stepping reloads on demand then.
-    if (!episodesBgProc.running) {
-      root.historyListLoadId = entry.id
-      episodesBgProc.command = ["python3", root.helperPath, "episodes", entry.id]
-      episodesBgProc.running = true
-    }
+    // …while the real grid loads. A stale in-flight load is stopped first
+    // so it can't overwrite this one.
+    root.episodeList = []
+    root.episodeView = []
+    root.loadingEpisodes = true
+    root.loadingEpisodesId = entry.id
+    root.statusText = "Loading episodes…"
+    if (episodesProc.running) episodesProc.running = false
+    episodesProc.command = ["python3", root.helperPath, "episodes", entry.id]
+    episodesProc.running = true
   }
 
   function searchEntry(entry) {
@@ -498,6 +506,14 @@ Panel {
       id: episodesOut
       waitForEnd: true
       onStreamFinished: {
+        // Stale arrival after navigating elsewhere: drop it so another
+        // title's list never overwrites the current grid or stepping order.
+        if (root.loadingEpisodesId !== "" && root.selectedAnimeId !== root.loadingEpisodesId) {
+          root.loadingEpisodes = false
+          root.pendingStep = 0
+          root.loadingEpisodesId = ""
+          return
+        }
         var parsed = null
         try {
           parsed = JSON.parse(episodesOut.text)
@@ -508,6 +524,7 @@ Panel {
           root.episodeList = []
           root.refreshEpisodeView()
           root.loadingEpisodes = false
+          root.loadingEpisodesId = ""
           root.pendingStep = 0
           root.statusText = "Failed to load episodes."
           return
@@ -515,6 +532,16 @@ Panel {
         root.episodeList = parsed
         root.refreshEpisodeView()
         root.loadingEpisodes = false
+        root.loadingEpisodesId = ""
+        var playbackActive = root.playingEpisode
+          || root.statusText === "Resolving stream…"
+          || String(root.statusText).indexOf("Playing ") === 0
+        // The grid caught up with the now-playing title (e.g. a history
+        // resume opened it): upgrade Prev/Next to the full order.
+        if (root.selectedAnimeId === root.nowPlayingAnimeId && root.nowPlayingAnimeId !== "" && root.nowPlayingEp !== "") {
+          root.nowPlayingEpisodes = root.episodeList.slice()
+          root.nowPlayingFullList = true
+        }
         // A queued Prev/Next step only applies when this list belongs to the
         // now-playing title; otherwise it is stale and dropped.
         if (root.pendingStep !== 0 && root.selectedAnimeId === root.nowPlayingAnimeId && root.nowPlayingAnimeId !== "") {
@@ -531,7 +558,8 @@ Panel {
           return
         }
         root.pendingStep = 0
-        root.statusText = root.episodeList.length === 0 ? "No episodes found." : ""
+        // While a stream is resolving/playing, leave its status alone.
+        if (!playbackActive) root.statusText = root.episodeList.length === 0 ? "No episodes found." : ""
       }
     }
     stderr: StdioCollector {
@@ -539,59 +567,20 @@ Panel {
       waitForEnd: true
     }
     onExited: function(code) {
+      if (root.loadingEpisodesId !== "" && root.selectedAnimeId !== root.loadingEpisodesId) {
+        root.loadingEpisodes = false
+        root.pendingStep = 0
+        root.loadingEpisodesId = ""
+        return
+      }
       if (root.loadingEpisodes) root.loadingEpisodes = false
       if (code !== 0 && root.episodeList.length === 0 && root.statusText === "Loading episodes…") {
         var detail = String(episodesErr.text || "").trim().split("\n").pop()
         root.pendingStep = 0
+        root.loadingEpisodesId = ""
         root.statusText = detail !== "" ? ("Failed to load episodes: " + detail) : ("Failed to load episodes (exit " + code + ").")
       }
     }
-  }
-
-  // Background episode-list refresh for history resumes. Runs on its own
-  // process so it can never contend with (or stall) the grid loader above.
-  // Upgrades the grid and the Prev/Next order quietly: playback status is
-  // never touched, and arrivals for navigated-away titles are skipped.
-  Process {
-    id: episodesBgProc
-    stdout: StdioCollector {
-      id: episodesBgOut
-      waitForEnd: true
-      onStreamFinished: {
-        var loadId = root.historyListLoadId
-        root.historyListLoadId = ""
-        if (loadId === "") return
-        var bparsed = null
-        try {
-          bparsed = JSON.parse(episodesBgOut.text)
-        } catch (e) {
-          bparsed = null
-        }
-        if (bparsed === null) return
-        if (root.selectedAnimeId === loadId) {
-          root.episodeList = bparsed
-          root.refreshEpisodeView()
-        }
-        if (root.nowPlayingAnimeId === loadId && root.nowPlayingEp !== "") {
-          root.nowPlayingEpisodes = bparsed.slice()
-          root.nowPlayingFullList = true
-        }
-        // A Next/Prev pressed while the refresh was in flight.
-        if (root.pendingStep !== 0 && root.nowPlayingAnimeId === loadId) {
-          var bd = root.pendingStep
-          root.pendingStep = 0
-          if (bparsed.length === 0) { root.statusText = "No episodes found."; return }
-          root.applyStep(bd)
-        }
-      }
-    }
-    stderr: StdioCollector {
-      id: episodesBgErr
-      waitForEnd: true
-    }
-    // Quiet by design: a failed refresh just leaves the single-episode stub,
-    // and stepping retries on demand. Never touches statusText.
-    onExited: { root.historyListLoadId = "" }
   }
 
   Process {
@@ -1261,7 +1250,9 @@ Panel {
                   root.selectedAnimeTitle = modelData.title
                   root.episodeList = []
                   root.loadingEpisodes = true
+                  root.loadingEpisodesId = modelData.id
                   root.statusText = "Loading episodes…"
+                  if (episodesProc.running) episodesProc.running = false
                   episodesProc.command = ["python3", root.helperPath, "episodes", modelData.id]
                   episodesProc.running = true
                 }
