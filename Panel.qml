@@ -227,7 +227,7 @@ Panel {
     root.episodeList = []
     root.episodeView = []
     root.statusText = "Searching…"
-    searchProc.command = [root.helperPath, "search", q]
+    searchProc.command = ["python3", root.helperPath, "search", q]
     searchProc.running = true
   }
 
@@ -238,7 +238,7 @@ Panel {
     root.episodeView = []
     root.loadingEpisodes = true
     root.statusText = "Loading episodes…"
-    episodesProc.command = [root.helperPath, "episodes", id]
+    episodesProc.command = ["python3", root.helperPath, "episodes", id]
     episodesProc.running = true
   }
 
@@ -258,7 +258,7 @@ Panel {
     root.currentPlayEp = ep
     root.playingEpisode = true
     root.statusText = "Resolving stream…"
-    playProc.command = [root.helperPath, "play", root.selectedAnimeId, ep, root.dubEnabled ? "dub" : "sub", root.quality]
+    playProc.command = ["python3", root.helperPath, "play", root.selectedAnimeId, ep, root.dubEnabled ? "dub" : "sub", root.quality]
     playProc.running = true
   }
 
@@ -444,9 +444,9 @@ Panel {
         }
         var mediaTitle = root.selectedAnimeTitle + (root.currentPlayEp ? " Episode " + root.currentPlayEp : "")
         var scriptArgs = [info.video_link, info.refr || "", info.sub_link || "", mediaTitle]
-        Quickshell.execDetached([root.playerPath].concat(scriptArgs))
+        Quickshell.execDetached(["sh", root.playerPath].concat(scriptArgs))
         if (root.selectedAnimeId && root.currentPlayEp) {
-          Quickshell.execDetached([root.historyPath, root.currentPlayEp, root.selectedAnimeId, root.selectedAnimeTitle])
+          Quickshell.execDetached(["sh", root.historyPath, root.currentPlayEp, root.selectedAnimeId, root.selectedAnimeTitle])
           histView.reload()
         }
         root.statusText = "Playing " + mediaTitle + "…"
@@ -1081,7 +1081,7 @@ Panel {
                   root.episodeList = []
                   root.loadingEpisodes = true
                   root.statusText = "Loading episodes…"
-                  episodesProc.command = [root.helperPath, "episodes", modelData.id]
+                  episodesProc.command = ["python3", root.helperPath, "episodes", modelData.id]
                   episodesProc.running = true
                 }
               }
