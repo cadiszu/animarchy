@@ -25,13 +25,33 @@ If `ani-cli` itself is missing, the popup shows an **Install ani-cli** button th
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/animarchy.git --enable --yes
+omarchy plugin add https://github.com/cadiszu/animarchy.git --enable --yes
 ```
 
 This clones the repo to `~/.config/omarchy/plugins/animarchy/` and adds the widget to the bar (right section by default). Move it with:
 
 ```bash
 omarchy bar move animarchy --section right
+```
+
+## Uninstall
+
+Remove the plugin itself:
+
+```bash
+omarchy plugin remove animarchy --yes
+```
+
+Remove the companion tools it uses (keeps shared packages like `mpv`, `fzf`, `ffmpeg`, `yt-dlp`, `zenity`, and `python3`, which other software needs):
+
+```bash
+omarchy pkg drop ani-cli ani-skip-git
+```
+
+Optionally clear the watch history as well:
+
+```bash
+rm -rf ~/.local/state/ani-cli
 ```
 
 ## Usage
