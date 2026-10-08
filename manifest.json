@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "animarchy",
+  "name": "Animarchy",
+  "version": "1.0.0",
+  "author": "cadiszu",
+  "license": "MIT",
+  "description": "Launch anime streams with ani-cli from the Omarchy bar. Search, resume history, and pick subtitle/dub, quality, download, and skip-intro options in a themed popup.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Animarchy",
+    "description": "Stream anime with ani-cli",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

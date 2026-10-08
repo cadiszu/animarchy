@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+import sys, os, subprocess, json
+
+LIB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anicli-lib.sh")
+
+def run(script, *argv):
+    return subprocess.run(["sh", "-c", script, "--", *argv],
+                          capture_output=True, text=True, timeout=60)
+
+def search(q):
+    q = q.replace(" ", "+")
+    p = run(f'. "{LIB}"; hianime_search "$1"', q)
+    out=[]
+    for line in p.stdout.splitlines():
+        if "\t" in line:
+            aid,_,title = line.partition("\t")
+            out.append({"id": aid, "title": title})
+    print(json.dumps(out))
+
+def episodes(aid):
+    p = run(f'. "{LIB}"; hianime_episodes "$1"', aid)
+    out=[]
+    for line in p.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            out.append({"id": parts[0], "ep": parts[1]})
+    print(json.dumps(out))
+
+def play(aid, ep, mode, quality):
+    script = (
+        f'. "{LIB}"; '
+        'episode_maps="$(hianime_episodes "$1")"; '
+        'hianime_m3u8 "$2" "$3" && select_quality "$4"; '
+        'if [ -z "$video_link" ]; then '
+        'mode_fb="sub"; [ "$3" = "sub" ] && mode_fb="dub"; '
+        'hianime_m3u8 "$2" "$mode_fb" && select_quality "$4"; '
+        'fi; '
+        'printf "video_link=%s\\nsub_link=%s\\nrefr=%s\\nmal_id=%s\\n" '
+        '"$video_link" "$sub_link" "$refr" "$mal_id"'
+    )
+    p = run(script, aid, ep, mode, quality)
+    data={}
+    for line in p.stdout.splitlines():
+        if "=" in line:
+            k,_,v=line.partition("="); data[k]=v
+    if "video_link" not in data or not data["video_link"]:
+        print(json.dumps({"error":"no source","stderr":p.stderr.strip()[-200:]})); return
+    print(json.dumps(data))
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print(json.dumps({"error":"usage"})); sys.exit(1)
+    cmd = sys.argv[1]
+    if cmd == "search":
+        search(sys.argv[2])
+    elif cmd == "episodes":
+        episodes(sys.argv[2])
+    elif cmd == "play" and len(sys.argv) >= 5:
+        play(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv)>5 else "best")
+    else:
+        print(json.dumps({"error":"usage"}))
