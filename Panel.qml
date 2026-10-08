@@ -51,6 +51,8 @@ Panel {
   // Pending autoplay after a history resume loads its full episode list,
   // so Prev/Next has the whole grid instead of a single row.
   property string pendingHistoryEp: ""
+  // Pending Prev/Next step waiting on an episode-list reload.
+  property int pendingStep: 0
 
   // Optional companion binaries. ani-cli aborts the whole launch when a flag
   // needs a tool that is not installed (e.g. "--skip" without ani-skip), so we
@@ -231,6 +233,7 @@ Panel {
     // so it works even before the presence probe finishes or when only
     // terminal flows need ani-cli.
     root.pendingHistoryEp = ""
+    root.pendingStep = 0
     root.activeTab = 0
     root.searching = true
     root.searchResults = []
@@ -244,6 +247,7 @@ Panel {
 
   function selectAnime(id, title) {
     root.pendingHistoryEp = ""
+    root.pendingStep = 0
     root.selectedAnimeId = id
     root.selectedAnimeTitle = title
     root.episodeList = []
@@ -256,6 +260,7 @@ Panel {
 
   function clearSelection() {
     root.pendingHistoryEp = ""
+    root.pendingStep = 0
     root.selectedAnimeId = ""
     root.selectedAnimeTitle = ""
     root.episodeList = []
@@ -268,7 +273,9 @@ Panel {
     nowPlayingTitle = root.selectedAnimeTitle
     nowPlayingEp = ep
     nowPlayingAnimeId = root.selectedAnimeId
-    nowPlayingEpisodes = root.episodeList
+    // Snapshot a copy: later searches replace episodeList wholesale and must
+    // not disturb the stepping order.
+    nowPlayingEpisodes = root.episodeList.slice()
     root.currentPlayEp = ep
     root.playingEpisode = true
     root.statusText = "Resolving stream…"
@@ -278,13 +285,39 @@ Panel {
 
   function stepEpisode(delta) {
     var list = root.nowPlayingEpisodes
+    if (!list || list.length === 0) {
+      // No grid loaded for this title (e.g. resumed before the list was
+      // fetched). Fetch it, then step once it arrives.
+      if (root.nowPlayingAnimeId === "") {
+        root.statusText = "Episode list isn't loaded. Open the episode grid (☰) first."
+        return
+      }
+      if (root.loadingEpisodes) return
+      root.pendingStep = delta
+      root.selectedAnimeId = root.nowPlayingAnimeId
+      root.selectedAnimeTitle = root.nowPlayingTitle
+      root.episodeList = []
+      root.episodeView = []
+      root.loadingEpisodes = true
+      root.statusText = "Loading episodes…"
+      episodesProc.command = ["python3", root.helperPath, "episodes", root.nowPlayingAnimeId]
+      episodesProc.running = true
+      return
+    }
+    root.applyStep(delta)
+  }
+
+  function applyStep(delta) {
+    var list = root.nowPlayingEpisodes
     if (!list || list.length === 0 || root.nowPlayingEp === "") return
     var idx = -1
     for (var i = 0; i < list.length; i++) {
       if (String(list[i].ep) === String(root.nowPlayingEp)) { idx = i; break }
     }
+    if (idx < 0) { root.statusText = "Current episode isn't in the loaded list."; return }
     var n = idx + delta
-    if (idx < 0 || n < 0 || n >= list.length) return
+    if (n < 0) { root.statusText = "Already at the first episode."; return }
+    if (n >= list.length) { root.statusText = "You're at the latest listed episode."; return }
     var np = list[n]
     root.selectedAnimeTitle = root.nowPlayingTitle
     root.selectedAnimeId = root.nowPlayingAnimeId
@@ -335,6 +368,7 @@ Panel {
     root.selectedAnimeId = entry.id
     root.selectedAnimeTitle = entry.title
     root.pendingHistoryEp = entry.episode
+    root.pendingStep = 0
     root.episodeList = []
     root.episodeView = []
     root.loadingEpisodes = true
@@ -460,6 +494,7 @@ Panel {
           root.refreshEpisodeView()
           root.loadingEpisodes = false
           root.pendingHistoryEp = ""
+          root.pendingStep = 0
           root.statusText = "Failed to load episodes."
           return
         }
@@ -477,6 +512,18 @@ Panel {
           root.playEpisode(want)
           return
         }
+        if (root.pendingStep !== 0) {
+          var d = root.pendingStep
+          root.pendingStep = 0
+          if (root.episodeList.length === 0) {
+            root.statusText = "No episodes found."
+            return
+          }
+          root.nowPlayingEpisodes = root.episodeList.slice()
+          root.statusText = ""
+          root.applyStep(d)
+          return
+        }
         root.statusText = root.episodeList.length === 0 ? "No episodes found." : ""
       }
     }
@@ -489,6 +536,7 @@ Panel {
       if (code !== 0 && root.episodeList.length === 0 && root.statusText === "Loading episodes…") {
         var detail = String(episodesErr.text || "").trim().split("\n").pop()
         root.pendingHistoryEp = ""
+        root.pendingStep = 0
         root.statusText = detail !== "" ? ("Failed to load episodes: " + detail) : ("Failed to load episodes (exit " + code + ").")
       }
     }
@@ -583,19 +631,15 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(430))
     contentHeight: panel.fittedContentHeight(content.implicitHeight)
 
+    // No single-key shortcuts: this panel is click-driven (toggles live in
+    // Settings). Esc closes and Tab moves between panels, which are Omarchy
+    // shell conventions, not plugin shortcuts.
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       blocked: searchField.activeFocus || downloadDirField.activeFocus || episodeRangeField.activeFocus || qualityDropdown.popupOpen
-      onReturnRequested: root.continueWatching()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onTextKey: function(t) {
-        if (t === "/" || t === "s") root.focusSearch()
-        else if (t === "c") root.continueWatching()
-        else if (t === "d") root.persistSetting("dub", !root.dubEnabled)
-        else if (t === "D") root.persistSetting("download", !root.downloadEnabled)
-      }
 
       Flickable {
         id: scroller
@@ -1161,6 +1205,7 @@ Panel {
                 onClicked: {
                   root.activeTab = 0
                   root.pendingHistoryEp = ""
+                  root.pendingStep = 0
                   root.selectedAnimeId = modelData.id
                   root.selectedAnimeTitle = modelData.title
                   root.episodeList = []
