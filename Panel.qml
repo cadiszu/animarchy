@@ -142,15 +142,22 @@ Panel {
 
   function downloadEpisodes() {
     if (root.episodeView.length === 0 || root.selectedAnimeTitle === "") return
-    var args = ["-q", root.quality]
+    var args = ["-q", root.quality, "-d"]
     if (root.dubEnabled) args.push("--dub")
-    args.push("-d")
     if (root.skipIntroEnabled && root.aniSkipPresent) args.push("--skip")
-    if (root.nextepEnabled) args.push("-N")
+    // -N is a view mode (prints next-ep info then exits 0), so passing it
+    // to a download silently produces no files; for finished shows it exits
+    // immediately after the countdown header, which looks the same as your
+    // one-second hang-and-close. Without -S 1 the re-search for <Title>
+    // can also wait forever on fzf. Title is from the provider, so top hit is correct.
+    args.push("-S", "1")
     var spec = root.downloadRangeSpec()
     if (spec !== "") args.push("-e", spec)
     args.push(root.selectedAnimeTitle)
-    launch(args, root.selectedAnimeTitle)
+    // Keep the popup visible while the download runs: closing it here hid
+    // the progress/error feedback, and making an ID-based picker is lower
+    // leverage than unblocking the common bulk-download now.
+    launch(args, root.selectedAnimeTitle, /*keepOpen=*/true)
   }
 
   // Launch ani-cli inside the default Omarchy terminal and pull the popup down.
@@ -159,7 +166,7 @@ Panel {
   // so the window is visible instead of opening tiled behind other windows.
   // We wrap the call in a shell that holds the window open if ani-cli exits
   // immediately, so a dependency error is actually readable instead of a blink.
-  function launch(args, subdir) {
+  function launch(args, subdir, keepOpen) {
     var prefix = ""
     if (args.indexOf("-d") !== -1) {
       var base = String(root.downloadDir || "").trim()
@@ -184,6 +191,10 @@ Panel {
     Quickshell.execDetached([
       "omarchy-launch-tui", "--app-id=TUI.float", "sh", "-c", wrapped
     ])
+    if (keepOpen === true) {
+      statusText = "Downloading… watch the terminal for progress."
+      return
+    }
     statusText = "Launching ani-cli…"
     close()
   }

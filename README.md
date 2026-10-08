@@ -6,9 +6,9 @@ An Omarchy bar plugin for [ani-cli](https://github.com/pystardust/ani-cli): sear
 
 - **Search tab** — type a query, get results inline, pick a title to load its episode grid (8-column, scrollable, filters by episode range)
 - **Now playing footer** — shows current title + episode with **Prev / Next** buttons (swaps the stream, kills the old player)
-- **Play History tab** — one row per title, newest first, with the last-watched episode pill; click resumes that episode directly, `☰` opens its episode grid instead
+- **Play History tab** — one row per title, newest first, with the last-watched episode pill; click resumes that episode and opens its episode grid, `☰` opens the grid without playing
 - **Episode range filter** — e.g. `5-100` narrows the grid; bulk download uses exactly what's shown
-- **Bulk download** — "Download all N episodes" button; saves to `<folder>/<Title>/` with mp4 + subtitles
+- **Bulk download** — "Download all N episodes" button; saves to `<folder>/<Title>/` with mp4 + subtitles (popup stays open so progress/errors stay visible in the floating terminal)
 - **Settings (gear icon)** — English dub (falls back to sub when no dub source), Download mode, Skip intro, Next-ep countdown, quality selector, episode range, download folder (type or Browse…)
 - **Click-to-install** missing optional tools (ani-skip) from inside the panel
 - Long history titles get a scrolling marquee (pauses on hover); everything follows the active Omarchy theme
