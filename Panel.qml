@@ -48,6 +48,9 @@ Panel {
   property string nowPlayingEp: ""
   property bool showSettings: false
   property int activeTab: 0
+  // Pending autoplay after a history resume loads its full episode list,
+  // so Prev/Next has the whole grid instead of a single row.
+  property string pendingHistoryEp: ""
 
   // Optional companion binaries. ani-cli aborts the whole launch when a flag
   // needs a tool that is not installed (e.g. "--skip" without ani-skip), so we
@@ -155,7 +158,12 @@ Panel {
       else if (base.indexOf("~/") === 0) base = Quickshell.env("HOME") + base.slice(1)
       if (base === "") base = Quickshell.env("HOME") + "/Downloads"
       var dir = base
-      if (subdir !== undefined && String(subdir) !== "") dir = base + "/" + String(subdir)
+      if (subdir !== undefined && String(subdir) !== "") {
+        // Upstream titles can contain "/" (e.g. "Fate/stay night"); keep the
+        // download inside one folder instead of creating nested directories.
+        var safeSub = String(subdir).replace(/\//g, "_")
+        dir = base + "/" + safeSub
+      }
       if (dir !== "" && dir !== "/") {
         prefix = "mkdir -p " + shellQuote(dir) + " && ANI_CLI_DOWNLOAD_DIR=" + shellQuote(dir) + " "
       }
@@ -219,7 +227,10 @@ Panel {
   function browseSearch() {
     var q = searchField.text.trim()
     if (q === "") { statusText = "Type an anime name…"; return }
-    if (!root.aniCliPresent) { statusText = "ani-cli is not installed."; return }
+    // Native search uses the python helper + curl, not the ani-cli binary,
+    // so it works even before the presence probe finishes or when only
+    // terminal flows need ani-cli.
+    root.pendingHistoryEp = ""
     root.activeTab = 0
     root.searching = true
     root.searchResults = []
@@ -232,6 +243,7 @@ Panel {
   }
 
   function selectAnime(id, title) {
+    root.pendingHistoryEp = ""
     root.selectedAnimeId = id
     root.selectedAnimeTitle = title
     root.episodeList = []
@@ -243,6 +255,7 @@ Panel {
   }
 
   function clearSelection() {
+    root.pendingHistoryEp = ""
     root.selectedAnimeId = ""
     root.selectedAnimeTitle = ""
     root.episodeList = []
@@ -250,7 +263,8 @@ Panel {
   }
 
   function playEpisode(ep) {
-    if (!root.aniCliPresent) { statusText = "ani-cli is not installed."; return }
+    // Native resolve + mpv playback; the ani-cli binary is only needed for
+    // terminal flows (continue/download), not for this path.
     nowPlayingTitle = root.selectedAnimeTitle
     nowPlayingEp = ep
     nowPlayingAnimeId = root.selectedAnimeId
@@ -305,22 +319,28 @@ Panel {
   }
 
   function continueWatching() {
-    if (!root.aniCliPresent) { open(); statusText = "ani-cli is not installed."; return }
+    // Only block once the probe has actually finished; before that the
+    // binary may exist and the launch is worth attempting.
+    if (root.probeDone && !root.aniCliPresent) { open(); statusText = "ani-cli is not installed."; return }
     var args = optionArgs()
     args.push("-c")
     launch(args)
   }
 
-  // Open a history entry as a fresh search. ani-cli resumes by history id, not
-  // by an arbitrary title, so per-row "resume" would only ever continue the
-  // most recent show; searching the title is honest and always works.
+  // Resume a history row with the full episode list, so Prev/Next keeps
+  // working. Loads episodes first, then autoplays the saved episode.
   function playFromHistory(entry) {
     if (!entry || !entry.id || !entry.episode) return
+    root.activeTab = 0
     root.selectedAnimeId = entry.id
     root.selectedAnimeTitle = entry.title
-    root.episodeList = [{ id: "", ep: entry.episode }]
-    root.episodeView = root.episodeList
-    root.playEpisode(entry.episode)
+    root.pendingHistoryEp = entry.episode
+    root.episodeList = []
+    root.episodeView = []
+    root.loadingEpisodes = true
+    root.statusText = "Loading episodes…"
+    episodesProc.command = ["python3", root.helperPath, "episodes", entry.id]
+    episodesProc.running = true
   }
 
   function searchEntry(entry) {
@@ -394,15 +414,33 @@ Panel {
       id: searchOut
       waitForEnd: true
       onStreamFinished: {
+        var parsed = null
         try {
-          root.searchResults = JSON.parse(searchOut.text)
+          parsed = JSON.parse(searchOut.text)
         } catch (e) {
+          parsed = null
+        }
+        if (parsed === null) {
           root.searchResults = []
+          root.statusText = "Search failed."
+        } else {
+          root.searchResults = parsed
+          root.statusText = parsed.length === 0 ? "No results." : ""
         }
         root.searching = false
       }
     }
-    onExited: { if (root.searching) root.searching = false }
+    stderr: StdioCollector {
+      id: searchErr
+      waitForEnd: true
+    }
+    onExited: function(code) {
+      if (root.searching) root.searching = false
+      if (code !== 0 && root.searchResults.length === 0 && root.statusText === "Searching…") {
+        var detail = String(searchErr.text || "").trim().split("\n").pop()
+        root.statusText = detail !== "" ? ("Search failed: " + detail) : ("Search failed (exit " + code + ").")
+      }
+    }
   }
 
   Process {
@@ -411,16 +449,49 @@ Panel {
       id: episodesOut
       waitForEnd: true
       onStreamFinished: {
+        var parsed = null
         try {
-          root.episodeList = JSON.parse(episodesOut.text)
+          parsed = JSON.parse(episodesOut.text)
         } catch (e) {
-          root.episodeList = []
+          parsed = null
         }
+        if (parsed === null) {
+          root.episodeList = []
+          root.refreshEpisodeView()
+          root.loadingEpisodes = false
+          root.pendingHistoryEp = ""
+          root.statusText = "Failed to load episodes."
+          return
+        }
+        root.episodeList = parsed
         root.refreshEpisodeView()
         root.loadingEpisodes = false
+        if (root.pendingHistoryEp !== "") {
+          var want = root.pendingHistoryEp
+          root.pendingHistoryEp = ""
+          if (root.episodeView.length === 0 && root.episodeList.length === 0) {
+            root.statusText = "No episodes found."
+            return
+          }
+          root.statusText = ""
+          root.playEpisode(want)
+          return
+        }
+        root.statusText = root.episodeList.length === 0 ? "No episodes found." : ""
       }
     }
-    onExited: { if (root.loadingEpisodes) root.loadingEpisodes = false }
+    stderr: StdioCollector {
+      id: episodesErr
+      waitForEnd: true
+    }
+    onExited: function(code) {
+      if (root.loadingEpisodes) root.loadingEpisodes = false
+      if (code !== 0 && root.episodeList.length === 0 && root.statusText === "Loading episodes…") {
+        var detail = String(episodesErr.text || "").trim().split("\n").pop()
+        root.pendingHistoryEp = ""
+        root.statusText = detail !== "" ? ("Failed to load episodes: " + detail) : ("Failed to load episodes (exit " + code + ").")
+      }
+    }
   }
 
   Process {
@@ -433,13 +504,14 @@ Panel {
         try {
           info = JSON.parse(playOut.text)
         } catch (e) {
-          root.statusText = "Failed to resolve stream."
+          var errDetail = String(playErr.text || "").trim().split("\n").pop()
+          root.statusText = errDetail !== "" ? ("Failed to resolve stream: " + errDetail) : "Failed to resolve stream."
           root.playingEpisode = false
           return
         }
         root.playingEpisode = false
         if (!info || !info.video_link) {
-          root.statusText = (info && info.error) ? info.error : "No playable source."
+          root.statusText = (info && (info.error || info.stderr)) ? (info.error || info.stderr) : "No playable source."
           return
         }
         var mediaTitle = root.selectedAnimeTitle + (root.currentPlayEp ? " Episode " + root.currentPlayEp : "")
@@ -447,12 +519,22 @@ Panel {
         Quickshell.execDetached(["sh", root.playerPath].concat(scriptArgs))
         if (root.selectedAnimeId && root.currentPlayEp) {
           Quickshell.execDetached(["sh", root.historyPath, root.currentPlayEp, root.selectedAnimeId, root.selectedAnimeTitle])
-          histView.reload()
+          Qt.callLater(function() { histView.reload() })
         }
         root.statusText = "Playing " + mediaTitle + "…"
       }
     }
-    onExited: { root.playingEpisode = false }
+    stderr: StdioCollector {
+      id: playErr
+      waitForEnd: true
+    }
+    onExited: function(code) {
+      if (root.playingEpisode) root.playingEpisode = false
+      if (code !== 0 && root.statusText === "Resolving stream…") {
+        var detail = String(playErr.text || "").trim().split("\n").pop()
+        root.statusText = detail !== "" ? ("Failed to resolve stream: " + detail) : ("Failed to resolve stream (exit " + code + ").")
+      }
+    }
   }
 
   Component.onCompleted: {
@@ -504,7 +586,7 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: searchField.activeFocus || qualityDropdown.popupOpen
+      blocked: searchField.activeFocus || downloadDirField.activeFocus || episodeRangeField.activeFocus || qualityDropdown.popupOpen
       onReturnRequested: root.continueWatching()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -866,6 +948,7 @@ Panel {
               spacing: Style.space(8)
 
               TextField {
+                id: downloadDirField
                 width: parent.width - 110 - parent.spacing
                 placeholderText: "e.g. ~/Downloads"
                 text: root.downloadDir
@@ -944,6 +1027,7 @@ Panel {
               }
 
               TextField {
+                id: episodeRangeField
                 width: parent.width
                 placeholderText: "e.g. 1-12"
                 text: root.episodeRange
@@ -1034,7 +1118,7 @@ Panel {
                     id: marqueeTimer
                     interval: 50
                     repeat: true
-                    running: titleTextA.implicitWidth > titleItem.width && !rowContent.hot
+                    running: root.activeTab === 1 && !root.showSettings && titleTextA.implicitWidth > titleItem.width && !rowContent.hot
                     onTriggered: {
                       var shift = titleTextA.implicitWidth + titleRow.spacing
                       titleRow.x -= 1
@@ -1076,6 +1160,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: {
                   root.activeTab = 0
+                  root.pendingHistoryEp = ""
                   root.selectedAnimeId = modelData.id
                   root.selectedAnimeTitle = modelData.title
                   root.episodeList = []

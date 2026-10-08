@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
-import sys, os, subprocess, json
+import sys, os, subprocess, json, urllib.parse
 
 LIB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anicli-lib.sh")
 
+def _sh_dq(s):
+    # Escape for embedding inside double quotes in an sh -c script.
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+
 def run(script, *argv):
-    return subprocess.run(["sh", "-c", script, "--", *argv],
-                          capture_output=True, text=True, timeout=60)
+    try:
+        return subprocess.run(["sh", "-c", script, "--", *argv],
+                              capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout if isinstance(e.stdout, str) else ""
+        err = (e.stderr if isinstance(e.stderr, str) else "") or "timeout after 60s"
+        return subprocess.CompletedProcess(e.cmd if e.cmd else ["sh"], 124, out, err)
 
 def search(q):
-    q = q.replace(" ", "+")
-    p = run(f'. "{LIB}"; hianime_search "$1"', q)
+    q = urllib.parse.quote_plus(q)
+    p = run(f'. "{_sh_dq(LIB)}"; hianime_search "$1"', q)
     out=[]
     for line in p.stdout.splitlines():
         if "\t" in line:
@@ -18,7 +27,7 @@ def search(q):
     print(json.dumps(out))
 
 def episodes(aid):
-    p = run(f'. "{LIB}"; hianime_episodes "$1"', aid)
+    p = run(f'. "{_sh_dq(LIB)}"; hianime_episodes "$1"', aid)
     out=[]
     for line in p.stdout.splitlines():
         parts = line.split("\t")
@@ -28,7 +37,7 @@ def episodes(aid):
 
 def play(aid, ep, mode, quality):
     script = (
-        f'. "{LIB}"; '
+        f'. "{_sh_dq(LIB)}"; '
         'episode_maps="$(hianime_episodes "$1")"; '
         'hianime_m3u8 "$2" "$3" && select_quality "$4"; '
         'if [ -z "$video_link" ]; then '

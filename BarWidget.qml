@@ -58,7 +58,10 @@ BarWidget {
 
   Process {
     id: launchProcess
-    command: ["ani-cli", "-c"]
+    // Fallback for right-click resume before the panel has loaded. Runs in a
+    // real terminal because ani-cli -c is interactive (fzf); headless it
+    // has no TTY and hangs. Holds the window open on error like Panel.launch.
+    command: ["omarchy-launch-tui", "--app-id=TUI.float", "sh", "-c", "ani-cli -c; _rc=$?; if [ $_rc -ne 0 ]; then printf '\\n\\033[1;31mani-cli exited (%s).\\033[0m Press Enter to close.\\n' \"$_rc\"; read -r _; fi"]
   }
 
   WidgetButton {
@@ -69,16 +72,18 @@ BarWidget {
     active: root.launching || root.opened
     horizontalMargin: 7.5
     tooltipText: root.opened
-      ? "ani-cli\nLeft click: close · Right click: hide"
+      ? "ani-cli\nLeft click: close · Right click: resume last episode"
       : "ani-cli\nLeft click: open · Right click: resume last episode"
 
     onPressed: function(b) {
       if (b === Qt.RightButton) {
         // Without ani-cli there's nothing to resume: open the panel instead
-        // so the install banner is visible. Panel may still be loading, in
-        // which case fall through to the direct launch attempt.
+        // so the install banner is visible. Only trust the flag once the
+        // probe has finished; before that, attempt the resume.
         var panel = panelLoader.item
-        if (panel && panel.aniCliPresent === false) { root.open(); return }
+        if (panel && panel.probeDone === true && panel.aniCliPresent === false) { root.open(); return }
+        // Prefer the panel path so user options (quality/dub/skip) apply.
+        if (panel && typeof panel.continueWatching === "function") { panel.continueWatching(); return }
         if (!launchProcess.running) launchProcess.running = true
       } else {
         root.togglePanel()
