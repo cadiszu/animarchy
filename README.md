@@ -59,7 +59,7 @@ rm -rf ~/.local/state/ani-cli
 - **Left-click** the bar icon: open the popup. **Right-click**: resume the last episode (`ani-cli -c`).
 - Type in the search field on either tab and press Enter — results always land on the Search tab.
 - Click a result → episode grid → click a tile to play (mpv floats, focused).
-- Play History rows resume the saved episode; the `☰` button opens that title's grid instead.
+- Play History rows resume the saved episode; the `☰` button opens that title's grid instead. Resuming also loads the full episode list in the background, so Prev/Next can step to neighboring episodes.
 - The popup stays open while playing so Prev/Next remain one click away.
 
 ## Notes
