@@ -50,6 +50,10 @@ Panel {
   property int activeTab: 0
   // Pending Prev/Next step waiting on an episode-list reload.
   property int pendingStep: 0
+  // Deferred autoplay for a history resume: the grid load carries this pair.
+  // No episode playback replays stale state after navigation.
+  property string pendingHistoryEp: ""
+  property string pendingHistoryId: ""
   // Anime id the in-flight grid load belongs to. A stale arrival after
   // navigating elsewhere is dropped, never applied to the wrong title.
   property string loadingEpisodesId: ""
@@ -375,27 +379,22 @@ Panel {
     launch(args)
   }
 
-  // Resume a history row: plays the saved episode immediately and opens that
-  // title's episode grid (same loader as picking a search result), so the
-  // grid fills in and Prev/Next steps through the full order.
+  // History row: raw title -> ID. Sorted result == ID.
   function playFromHistory(entry) {
     if (!entry || !entry.id || !entry.episode) return
+    if (episodesProc.running) episodesProc.running = false
     root.pendingStep = 0
     root.activeTab = 0
     root.selectedAnimeId = entry.id
     root.selectedAnimeTitle = entry.title
-    // Instant playback off a stub so the saved episode starts at once…
-    root.episodeList = [{ id: "", ep: entry.episode }]
-    root.episodeView = root.episodeList
-    root.playEpisode(entry.episode, false)
-    // …while the real grid loads. A stale in-flight load is stopped first
-    // so it can't overwrite this one.
+    root.searchResults = []
     root.episodeList = []
     root.episodeView = []
+    root.pendingHistoryEp = entry.episode
+    root.pendingHistoryId = entry.id
     root.loadingEpisodes = true
     root.loadingEpisodesId = entry.id
     root.statusText = "Loading episodes…"
-    if (episodesProc.running) episodesProc.running = false
     episodesProc.command = ["python3", root.helperPath, "episodes", entry.id]
     episodesProc.running = true
   }
@@ -525,12 +524,31 @@ Panel {
           root.refreshEpisodeView()
           root.loadingEpisodes = false
           root.loadingEpisodesId = ""
+          root.pendingHistoryEp = ""
+          root.pendingHistoryId = ""
           root.pendingStep = 0
           root.statusText = "Failed to load episodes."
           return
         }
         root.episodeList = parsed
         root.refreshEpisodeView()
+        // Deferred history autoplay: play the saved episode once the full
+        // list for that same title has arrived. List correctness follows
+        // solely from the activeTab/selectedAnimeId guards + stale return.
+        if (root.pendingHistoryId !== "" && root.pendingHistoryId === root.selectedAnimeId) {
+          var historyWant = root.pendingHistoryEp
+          root.pendingHistoryEp = ""
+          root.pendingHistoryId = ""
+          root.loadingEpisodes = false
+          root.loadingEpisodesId = ""
+          if (root.episodeList.length === 0) {
+            root.statusText = "No episodes found."
+            return
+          }
+          root.statusText = ""
+          root.playEpisode(historyWant, true)
+          return
+        }
         root.loadingEpisodes = false
         root.loadingEpisodesId = ""
         var playbackActive = root.playingEpisode
@@ -577,6 +595,8 @@ Panel {
       if (code !== 0 && root.episodeList.length === 0 && root.statusText === "Loading episodes…") {
         var detail = String(episodesErr.text || "").trim().split("\n").pop()
         root.pendingStep = 0
+        root.pendingHistoryEp = ""
+        root.pendingHistoryId = ""
         root.loadingEpisodesId = ""
         root.statusText = detail !== "" ? ("Failed to load episodes: " + detail) : ("Failed to load episodes (exit " + code + ").")
       }
