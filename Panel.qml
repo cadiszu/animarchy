@@ -821,7 +821,10 @@ Panel {
             // stays underneath as a fallback if the SVG ever fails to load.
             Item {
               Layout.alignment: Qt.AlignVCenter
-              width: Style.font.iconLarge
+              // The SVG's artwork sits inside the middle of its 24x24 viewBox,
+              // so the painted eye is only ~59% of the box. Size the box up to
+              // land the mark at roughly the title's cap height.
+              width: Style.font.display
               height: width
 
               Image {
