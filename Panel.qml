@@ -1407,6 +1407,17 @@ Panel {
               width: parent.width
 
               Text {
+                text: "Now Playing:"
+                color: root.dim
+                font.family: root.ff
+                font.pixelSize: Style.font.subtitle
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
+                // Fixed label: never elide or shrink, so the title absorbs
+                // the truncation instead of the caption.
+                Layout.rightMargin: Style.space(6)
+              }
+
+              Text {
                 text: root.nowPlayingTitle
                 color: root.fg
                 font.family: root.ff
