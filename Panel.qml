@@ -921,7 +921,10 @@ Panel {
 
             Text {
               width: parent.width
-              text: "ani-cli is not installed. Search, playback, and history need it."
+              // Verified: search, episode listing and stream resolution run through
+              // the vendored scraper, so they work with no ani-cli installed. Only
+              // downloads and right-click resume shell out to the binary.
+              text: "ani-cli is not installed. Search, playback, and history still work; downloads and resume need it."
               color: root.fg
               font.family: root.ff
               font.pixelSize: Style.font.body
