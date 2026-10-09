@@ -44,6 +44,7 @@ Panel {
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("anicli-data")).replace(/^file:\/\//, ""))
   readonly property string playerPath: decodeURIComponent(String(Qt.resolvedUrl("launch-mpv.sh")).replace(/^file:\/\//, ""))
   readonly property string historyPath: decodeURIComponent(String(Qt.resolvedUrl("record-history.sh")).replace(/^file:\/\//, ""))
+  readonly property string watchPath: decodeURIComponent(String(Qt.resolvedUrl("watch-mpv.sh")).replace(/^file:\/\//, ""))
   property string nowPlayingTitle: ""
   property string nowPlayingEp: ""
   property bool showSettings: false
@@ -309,6 +310,13 @@ Panel {
     root.nowPlayingFullList = false
   }
 
+  // A failed resolve means mpv never launches, so don't leave the exit watcher
+  // spinning for its full grace window with a stale "Now Playing" footer.
+  function abortPlayback() {
+    if (playerMonitorProc.running) playerMonitorProc.running = false
+    dismissNowPlaying()
+  }
+
   // Native resolve + mpv/TUI playback. The download toggle decides whether
   // the grid click produces a stream (mpv popup) or a bulk `-d` fetch (TUI).
   function playEpisode(ep, fullList) {
@@ -344,9 +352,10 @@ Panel {
     playerMonitorTitle = mediaTitle
     playerMonitorTicks = 0
     if (playerMonitorProc.running) playerMonitorProc.running = false
-    // Poll the mpv pidfile written by launch-mpv.sh; exit 2 means the player closed.
-    // Tracks the pidfile: Next/Prev overwrites pidfile, so follow it instead of exiting early.
-    playerMonitorProc.command = ["sh", "-c", "pid=$(cat \"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid\" 2>/dev/null); [ -z \"$pid\" ] && exit 2; for i in $(seq 1 600); do if ! ps -p \"$pid\" >/dev/null 2>&1; then cur=$(cat \"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid\" 2>/dev/null); if [ -n \"$cur\" ] && [ \"$cur\" != \"$pid\" ] && ps -p \"$cur\" >/dev/null 2>&1; then pid=\"$cur\"; else exit 2; fi; fi; sleep 1; done; exit 0"]
+    // watch-mpv.sh waits for launch-mpv.sh to publish a live pid (stream
+    // resolution takes a few seconds) and only then blocks until mpv exits.
+    // 180s is the grace window for a slow resolve before we give up.
+    playerMonitorProc.command = ["sh", root.watchPath, "180"]
     playerMonitorProc.running = true
   }
 
@@ -676,12 +685,14 @@ Panel {
           info = JSON.parse(playOut.text)
         } catch (e) {
           var errDetail = String(playErr.text || "").trim().split("\n").pop()
+          root.abortPlayback()
           root.statusText = errDetail !== "" ? ("Failed to resolve stream: " + errDetail) : "Failed to resolve stream."
           root.playingEpisode = false
           return
         }
         root.playingEpisode = false
         if (!info || !info.video_link) {
+          root.abortPlayback()
           root.statusText = (info && (info.error || info.stderr)) ? (info.error || info.stderr) : "No playable source."
           return
         }
@@ -703,6 +714,7 @@ Panel {
       if (root.playingEpisode) root.playingEpisode = false
       if (code !== 0 && root.statusText === "Resolving stream…") {
         var detail = String(playErr.text || "").trim().split("\n").pop()
+        root.abortPlayback()
         root.statusText = detail !== "" ? ("Failed to resolve stream: " + detail) : ("Failed to resolve stream (exit " + code + ").")
       }
     }
