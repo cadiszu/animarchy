@@ -48,6 +48,10 @@ Panel {
   property string nowPlayingEp: ""
   property bool showSettings: false
   property int activeTab: 0
+  // Monotonic gen: each mpv launch bumps it; its exit watcher closes over
+  // its own gen. If a newer episode started, the stale watcher exits
+  // without clearing. Dismiss writes "-" so late watchers honor it.
+  property int playerGen: 0
   // Pending Prev/Next step waiting on an episode-list reload.
   property int pendingStep: 0
   // Deferred autoplay for a history resume: the grid load carries this pair.
@@ -286,22 +290,55 @@ Panel {
     root.episodeView = []
   }
 
+  function dismissNowPlaying() {
+    if (root.nowPlayingEp !== "" && root.nowPlayingEp !== "-") root.nowPlayingEp = "-"
+    root.nowPlayingTitle = ""
+    root.nowPlayingAnimeId = ""
+    root.pendingStep = 0
+    root.loadingEpisodesId = ""
+    root.nowPlayingFullList = false
+  }
+
   function playEpisode(ep, fullList) {
     // Native resolve + mpv playback; the ani-cli binary is only needed for
     // terminal flows (continue/download), not for this path.
-    nowPlayingTitle = root.selectedAnimeTitle
+    var savedTitle = root.selectedAnimeTitle
+    var savedId = root.selectedAnimeId
+    var savedList = root.episodeList.slice()
+    var savedFull = (fullList === true)
+    nowPlayingTitle = savedTitle
     nowPlayingEp = ep
-    nowPlayingAnimeId = root.selectedAnimeId
+    nowPlayingAnimeId = savedId
     // Snapshot a copy: later searches replace episodeList wholesale and must
     // not disturb the stepping order.
-    nowPlayingEpisodes = root.episodeList.slice()
-    root.nowPlayingFullList = (fullList === true)
+    nowPlayingEpisodes = savedList.slice()
+    root.nowPlayingFullList = savedFull
+    // Monotonic token so the exit watcher for this ep can't clear a newer one.
+    root.playerGen++
+    var bg = root.playerGen
+    var mediaTitleToMonitor = savedTitle + (ep ? " Episode " + ep : "")
+    Qt.callLater(function() { startPlayerMonitor(mediaTitleToMonitor, bg) })
     root.currentPlayEp = ep
     root.playingEpisode = true
     root.statusText = "Resolving stream…"
     playProc.command = ["python3", root.helperPath, "play", root.selectedAnimeId, ep, root.dubEnabled ? "dub" : "sub", root.quality]
     playProc.running = true
   }
+
+  function startPlayerMonitor(mediaTitle, gen) {
+    playerMonitorGen = gen
+    playerMonitorTitle = mediaTitle
+    playerMonitorTicks = 0
+    if (playerMonitorProc.running) playerMonitorProc.running = false
+    // Poll the mpv pidfile written by launch-mpv.sh; exit 2 means the player closed.
+    // Tracks the pidfile: Next/Prev overwrites pidfile, so follow it instead of exiting early.
+    playerMonitorProc.command = ["sh", "-c", "pid=$(cat \"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid\" 2>/dev/null); [ -z \"$pid\" ] && exit 2; for i in $(seq 1 600); do if ! ps -p \"$pid\" >/dev/null 2>&1; then cur=$(cat \"${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid\" 2>/dev/null); if [ -n \"$cur\" ] && [ \"$cur\" != \"$pid\" ] && ps -p \"$cur\" >/dev/null 2>&1; then pid=\"$cur\"; else exit 2; fi; fi; sleep 1; done; exit 0"]
+    playerMonitorProc.running = true
+  }
+
+  property int playerMonitorGen: 0
+  property string playerMonitorTitle: ""
+  property int playerMonitorTicks: 0
 
   function stepEpisode(delta) {
     if (root.nowPlayingEp === "") return
@@ -654,6 +691,28 @@ Panel {
         var detail = String(playErr.text || "").trim().split("\n").pop()
         root.statusText = detail !== "" ? ("Failed to resolve stream: " + detail) : ("Failed to resolve stream (exit " + code + ").")
       }
+    }
+  }
+
+  // Polls the pidfile written by launch-mpv.sh; when that mpv exits (code 2)
+  // the footer hides. Stale poll for a newer episode is ignored via gen.
+  // The pidfile can be overwritten on Next/Prev, so the poll tracks the
+  // current pid and only exits when no pid (or its process) is alive.
+  Process {
+    id: playerMonitorProc
+    stderr: StdioCollector { id: playerMonitorErr; waitForEnd: true }
+    stdout: StdioCollector { id: playerMonitorOut; waitForEnd: true }
+    onExited: function(code) {
+      if (code !== 2) return
+      if (root.playerGen !== playerMonitorGen) return
+      if (root.nowPlayingEp === "" || root.nowPlayingEp === "-") return
+      root.nowPlayingEp = ""
+      root.nowPlayingTitle = ""
+      root.nowPlayingAnimeId = ""
+      root.pendingStep = 0
+      root.nowPlayingFullList = false
+      if (root.statusText === "Playing " + playerMonitorTitle + "…" || root.statusText.indexOf("Playing ") === 0)
+        root.statusText = ""
     }
   }
 
@@ -1312,7 +1371,7 @@ Panel {
 
           // ---- now playing footer ----
           Column {
-            visible: root.nowPlayingEp !== ""
+            visible: root.nowPlayingEp !== "" && root.nowPlayingEp !== "-"
             width: parent.width
             spacing: Style.space(6)
 
@@ -1338,6 +1397,16 @@ Panel {
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+              }
+
+              Button {
+                text: "✕"
+                foreground: root.dim
+                fontSize: Style.font.icon
+                horizontalPadding: Style.space(4)
+                verticalPadding: Style.space(2)
+                tooltipText: "Dismiss"
+                onClicked: root.dismissNowPlaying()
               }
             }
 
