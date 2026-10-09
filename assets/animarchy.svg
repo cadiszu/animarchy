@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Anime eye with a play mark in the iris. Filled white so the panel can
+       recolor it to the theme foreground or accent; the outline is 2.1 units
+       so it still resolves in the 16px bar slot. -->
+  <path d="M2.6 12C6.4 7.4 9.9 6 12 6s5.6 1.4 9.4 6c-3.8 4.6-7.3 6-9.4 6s-5.6-1.4-9.4-6z"
+        fill="none" stroke="#fff" stroke-width="2.1" stroke-linejoin="round"/>
+  <path d="M9.4 8.6L15.2 12l-5.8 3.4z" fill="#fff"/>
+</svg>

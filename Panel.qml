@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -816,12 +817,36 @@ Panel {
           RowLayout {
             width: parent.width
 
-            Text {
+            // Same eye mark as the bar, recolored to the accent. The glyph
+            // stays underneath as a fallback if the SVG ever fails to load.
+            Item {
               Layout.alignment: Qt.AlignVCenter
-              text: "\uf26c"
-              color: Color.accent
-              font.family: root.ff
-              font.pixelSize: Style.font.iconLarge
+              width: Style.font.iconLarge
+              height: width
+
+              Image {
+                id: headerMark
+                anchors.fill: parent
+                fillMode: Image.PreserveAspectFit
+                source: Qt.resolvedUrl("assets/animarchy.svg")
+                sourceSize.width: width * Screen.devicePixelRatio
+                sourceSize.height: height * Screen.devicePixelRatio
+                visible: status === Image.Ready
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                  colorization: 1
+                  colorizationColor: Color.accent
+                }
+              }
+
+              Text {
+                anchors.centerIn: parent
+                text: "\uf26c"
+                visible: headerMark.status !== Image.Ready
+                color: Color.accent
+                font.family: root.ff
+                font.pixelSize: Style.font.iconLarge
+              }
             }
 
             Column {

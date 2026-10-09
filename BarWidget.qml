@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 
@@ -64,16 +65,52 @@ BarWidget {
     command: ["omarchy-launch-tui", "--app-id=TUI.float", "sh", "-c", "ani-cli -c; _rc=$?; if [ $_rc -ne 0 ]; then printf '\\n\\033[1;31mani-cli exited (%s).\\033[0m Press Enter to close.\\n' \"$_rc\"; read -r _; fi"]
   }
 
+  // The bar mark is the eye SVG recolored to the theme foreground, going accent
+  // while an episode plays. The panel's footer episode is the only record of
+  // "something is playing", so read it from the loader.
+  readonly property bool playing: panelLoader.item
+    ? panelLoader.item.nowPlayingEp !== "" && panelLoader.item.nowPlayingEp !== "-"
+    : false
+  readonly property color iconColor: root.playing
+    ? Color.accent
+    : (root.bar ? root.bar.barForeground : Color.foreground)
+
   WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
+    // Fallback glyph, kept so the slot still has content if the SVG fails to
+    // load; labelVisible hides the text once the SVG renders. Keeping a
+    // non-empty text also preserves the slot's implicit width.
     text: "\uf26c"
+    labelVisible: false
     active: root.launching || root.opened
     horizontalMargin: 7.5
     tooltipText: root.opened
-      ? "ani-cli\nLeft click: close · Right click: resume last episode"
-      : "ani-cli\nLeft click: open · Right click: resume last episode"
+      ? "animarchy\nLeft click: close · Right click: resume last episode"
+      : "animarchy\nLeft click: open · Right click: resume last episode"
+
+    Image {
+      anchors.centerIn: parent
+      width: Style.bar.iconCanvas
+      height: width
+      fillMode: Image.PreserveAspectFit
+      source: Qt.resolvedUrl("assets/animarchy.svg")
+      // Decode at physical pixels: sourceSize is logical, which leaves the
+      // mark upscaled and soft on a HiDPI bar.
+      sourceSize.width: width * Screen.devicePixelRatio
+      sourceSize.height: height * Screen.devicePixelRatio
+      visible: status === Image.Ready
+      layer.enabled: true
+      layer.effect: MultiEffect {
+        colorization: 1
+        colorizationColor: root.iconColor
+
+        Behavior on colorizationColor {
+          ColorAnimation { duration: 160 }
+        }
+      }
+    }
 
     onPressed: function(b) {
       if (b === Qt.RightButton) {
