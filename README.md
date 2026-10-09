@@ -28,10 +28,17 @@ If `ani-cli` itself is missing, the popup shows an **Install ani-cli** button th
 omarchy plugin add https://github.com/cadiszu/animarchy.git --enable --yes
 ```
 
-This clones the repo to `~/.config/omarchy/plugins/animarchy/` and adds the widget to the bar (right section by default). Move it with:
+This clones the repo to `~/.config/omarchy/plugins/animarchy/` and adds the widget to the bar (right section by default).
+
+Note the two names, because the CLI treats them differently:
+
+- `omarchy plugin ...` takes the **install directory**, `animarchy`.
+- `omarchy bar ...` takes the **plugin id** from the manifest, `io.github.cadiszu.animarchy`.
+
+So reposition the widget with the full id:
 
 ```bash
-omarchy bar move animarchy --section right
+omarchy bar move io.github.cadiszu.animarchy right
 ```
 
 ## Uninstall
@@ -41,6 +48,8 @@ Remove the plugin itself:
 ```bash
 omarchy plugin remove animarchy --yes
 ```
+
+(`remove` takes the install directory, not the plugin id.)
 
 Remove the companion tools it uses (keeps shared packages like `mpv`, `fzf`, `ffmpeg`, `yt-dlp`, `zenity`, and `python3`, which other software needs):
 
