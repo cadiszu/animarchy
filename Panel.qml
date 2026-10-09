@@ -1285,7 +1285,7 @@ Panel {
               TextField {
                 id: episodeRangeField
                 width: parent.width
-                placeholderText: "Filters the grid, e.g. 1-12 or 5, 8-10"
+                placeholderText: "e.g. 5-10"
                 text: root.episodeRange
                 foreground: root.fg
                 Keys.onEscapePressed: root.close()
