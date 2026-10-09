@@ -1220,7 +1220,7 @@ Panel {
               spacing: Style.space(3)
 
               Text {
-                text: "Episodes (blank = pick in terminal)"
+                text: "Episodes (blank = all)"
                 color: root.dim
                 font.family: root.ff
                 font.pixelSize: Style.font.caption
@@ -1230,7 +1230,7 @@ Panel {
               TextField {
                 id: episodeRangeField
                 width: parent.width
-                placeholderText: "e.g. 1-12"
+                placeholderText: "Filters the grid, e.g. 1-12 or 5, 8-10"
                 text: root.episodeRange
                 foreground: root.fg
                 Keys.onEscapePressed: root.close()
