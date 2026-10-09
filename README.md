@@ -64,6 +64,26 @@ rm -rf ~/.local/state/ani-cli
 
 ## Notes
 
-- Search/episode/stream resolution reuses ani-cli's own scraping (`anicli-lib.sh` is extracted from the installed `/usr/bin/ani-cli`), so it tracks upstream behavior.
+- Search/episode/stream resolution reuses ani-cli's own scraping. `anicli-lib.sh` is a pinned, verbatim copy of lines 1-476 of ani-cli v5.1.0, cut just before the CLI's argument-parsing loop, so the panel can call the scraping helpers directly instead of driving the fzf/mpv TUI. To retarget a newer ani-cli, bump the line count and regenerate:
+
+  ```bash
+  head -n 476 /usr/bin/ani-cli > anicli-lib.sh
+  ```
 - Plays started from the popup are recorded to ani-cli's history file, so Play History stays in sync with terminal use.
 - Download mode shells out to `ani-cli -d` in a floating terminal; progress and errors are visible there.
+
+## Legal
+
+This plugin scrapes [allanime](https://allanime.day) through ani-cli to resolve
+stream URLs. That is third-party content; you are responsible for complying with
+the law and the site's terms where you live.
+
+## License
+
+GPL-3.0 — see [LICENSE](LICENSE).
+
+`anicli-lib.sh` is a verbatim excerpt of [ani-cli](https://github.com/pystardust/ani-cli)
+v5.1.0, Copyright (C) the ani-cli contributors, which is GPL-3.0. Vendoring it
+makes this plugin a derivative work, so animarchy is distributed under the same
+license. The rest of the code (QML panels, `anicli-data`, the helper scripts, and
+the icon) was written for this plugin.

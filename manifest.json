@@ -4,7 +4,7 @@
   "name": "Animarchy",
   "version": "1.0.0",
   "author": "cadiszu",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "description": "Launch anime streams with ani-cli from the Omarchy bar. Search, resume history, and pick subtitle/dub, quality, download, and skip-intro options in a themed popup.",
   "kinds": [
     "bar-widget"

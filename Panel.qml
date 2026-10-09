@@ -39,6 +39,13 @@ Panel {
   property var episodeList: []
   property var episodeView: []
   property bool searching: false
+  // Re-running a search kills the in-flight helper, whose stdout then ends
+  // empty and can be misread as a failure. Queue the query and run it when
+  // the current search settles, so exactly one search owns the results.
+  property string queuedSearch: ""
+  // stdout-close and process-exit both fire for every run, in an order
+  // Quickshell does not promise. The first one through claims the settle.
+  property bool searchSettled: true
   property bool loadingEpisodes: false
   property string selectedAnimeId: ""
   property string selectedAnimeTitle: ""
@@ -151,18 +158,16 @@ Panel {
     var args = ["-q", root.quality, "-d"]
     if (root.dubEnabled) args.push("--dub")
     if (root.skipIntroEnabled && root.aniSkipPresent) args.push("--skip")
-    // -N is a view mode (prints next-ep info then exits 0), so passing it
-    // to a download silently produces no files; for finished shows it exits
-    // immediately after the countdown header, which looks the same as your
-    // one-second hang-and-close. Without -S 1 the re-search for <Title>
-    // can also wait forever on fzf. Title is from the provider, so top hit is correct.
+    // -S 1 skips ani-cli's fzf title picker and takes the top hit, which
+    // is correct because the title came from the provider search. Without
+    // it the picker blocks on a TTY-less launch. -N is deliberately not
+    // passed: it is a view mode that writes no files when combined with -d.
     args.push("-S", "1")
     var spec = root.downloadRangeSpec()
     if (spec !== "") args.push("-e", spec)
     args.push(root.selectedAnimeTitle)
-    // Keep the popup visible while the download runs: closing it here hid
-    // the progress/error feedback, and making an ID-based picker is lower
-    // leverage than unblocking the common bulk-download now.
+    // Stay open while the download runs: progress and errors are reported
+    // in the floating terminal, and closing here would hide that feedback.
     launch(args, root.selectedAnimeTitle, /*keepOpen=*/true)
   }
 
@@ -260,15 +265,27 @@ Panel {
     launch(args, root.selectedAnimeTitle, /*keepOpen=*/true)
   }
 
+  function runQueuedSearch() {
+    if (root.queuedSearch === "") return
+    var q = root.queuedSearch
+    root.queuedSearch = ""
+    if (searchField) searchField.text = q
+    root.browseSearch()
+  }
+
   function browseSearch() {
     var q = searchField.text.trim()
     if (q === "") { statusText = "Type an anime name…"; return }
     // Native search uses the python helper + curl, not the ani-cli binary,
     // so it works even before the presence probe finishes or when only
     // terminal flows need ani-cli.
+    // A search is already running: queue rather than kill it, so a single
+    // helper process always owns the results.
+    if (root.searching) { root.queuedSearch = q; return }
     root.pendingStep = 0
     root.activeTab = 0
     root.searching = true
+    root.searchSettled = false
     root.searchResults = []
     root.selectedAnimeId = ""
     root.episodeList = []
@@ -287,8 +304,8 @@ Panel {
     root.loadingEpisodes = true
     root.loadingEpisodesId = id
     root.statusText = "Loading episodes…"
-    // A previous load still flying is stale: stop it so its late arrival
-    // can't overwrite this one (its death notice self-heals below).
+    // Stop a previous in-flight load so its late arrival cannot overwrite
+    // this one; its own handler then clears the loading state.
     if (episodesProc.running) episodesProc.running = false
     episodesProc.command = ["python3", root.helperPath, "episodes", id]
     episodesProc.running = true
@@ -542,6 +559,8 @@ Panel {
       id: searchOut
       waitForEnd: true
       onStreamFinished: {
+        if (root.searchSettled) return
+        root.searchSettled = true
         var parsed = null
         try {
           parsed = JSON.parse(searchOut.text)
@@ -556,6 +575,7 @@ Panel {
           root.statusText = parsed.length === 0 ? "No results." : ""
         }
         root.searching = false
+        root.runQueuedSearch()
       }
     }
     stderr: StdioCollector {
@@ -563,11 +583,16 @@ Panel {
       waitForEnd: true
     }
     onExited: function(code) {
-      if (root.searching) root.searching = false
-      if (code !== 0 && root.searchResults.length === 0 && root.statusText === "Searching…") {
+      // Fallback for a helper that died before its stdout closed. The
+      // stdout-close handler settles first in the normal case.
+      if (root.searchSettled) return
+      root.searchSettled = true
+      root.searching = false
+      if (root.statusText === "Searching…") {
         var detail = String(searchErr.text || "").trim().split("\n").pop()
         root.statusText = detail !== "" ? ("Search failed: " + detail) : ("Search failed (exit " + code + ").")
       }
+      root.runQueuedSearch()
     }
   }
 
@@ -721,10 +746,9 @@ Panel {
     }
   }
 
-  // Polls the pidfile written by launch-mpv.sh; when that mpv exits (code 2)
-  // the footer hides. Stale poll for a newer episode is ignored via gen.
-  // The pidfile can be overwritten on Next/Prev, so the poll tracks the
-  // current pid and only exits when no pid (or its process) is alive.
+  // Runs watch-mpv.sh, which blocks until the mpv started for this episode
+  // has exited and then exits 2 to hide the footer. A watcher for a
+  // superseded episode is ignored via playerGen.
   Process {
     id: playerMonitorProc
     stderr: StdioCollector { id: playerMonitorErr; waitForEnd: true }

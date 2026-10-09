@@ -12,8 +12,8 @@
 
 PIDFILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid"
 WAIT_MAX=${1:-180}
-# Safety valve only: a real episode runs ~24 min, so the old 600 (10 min)
-# expired mid-playback and the footer then never auto-hid again.
+# Safety valve only, kept well above any plausible playback length: if this
+# expires while an episode is still running, the footer stops auto-hiding.
 WATCH_MAX=43200
 
 # No `ps` (minimal image): fall back to "a pid was published".

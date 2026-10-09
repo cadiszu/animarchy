@@ -1,4 +1,18 @@
 #!/bin/sh
+# anicli-lib.sh - vendored excerpt of ani-cli, licensed under the GNU GPL v3.
+#
+# Source: https://github.com/pystardust/ani-cli (GPL-3.0)
+# Copyright (C) the ani-cli contributors.
+#
+# This is lines 1-476 of ani-cli v5.1.0, copied verbatim. It stops just before
+# the CLI's argument-parsing loop, so it carries the scraping helpers
+# (hianime_search, hianime_episodes, hianime_m3u8, select_quality) and their
+# globals without any interactive UI. The panel sources it to resolve streams
+# directly rather than driving ani-cli's fzf/mpv TUI.
+#
+# Because this is a verbatim excerpt of GPL-3.0 code, animarchy is distributed
+# under GPL-3.0 as well. Do not edit below this header; regenerate instead:
+#   head -n 476 /usr/bin/ani-cli > anicli-lib.sh
 
 version_number="5.1.0"
 
