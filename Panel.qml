@@ -248,6 +248,16 @@ Panel {
     root.episodeView = out
   }
 
+  function downloadSelected(ep) {
+    var args = ["-q", root.quality, "-d"]
+    if (root.dubEnabled) args.push("--dub")
+    if (root.skipIntroEnabled && root.aniSkipPresent) args.push("--skip")
+    args.push("-S", "1")
+    args.push("-e", ep)
+    args.push(root.selectedAnimeTitle)
+    launch(args, root.selectedAnimeTitle, /*keepOpen=*/true)
+  }
+
   function browseSearch() {
     var q = searchField.text.trim()
     if (q === "") { statusText = "Type an anime name…"; return }
@@ -299,9 +309,13 @@ Panel {
     root.nowPlayingFullList = false
   }
 
+  // Native resolve + mpv/TUI playback. The download toggle decides whether
+  // the grid click produces a stream (mpv popup) or a bulk `-d` fetch (TUI).
   function playEpisode(ep, fullList) {
-    // Native resolve + mpv playback; the ani-cli binary is only needed for
-    // terminal flows (continue/download), not for this path.
+    if (root.downloadEnabled) {
+      downloadSelected(ep)
+      return
+    }
     var savedTitle = root.selectedAnimeTitle
     var savedId = root.selectedAnimeId
     var savedList = root.episodeList.slice()
