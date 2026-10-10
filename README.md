@@ -30,14 +30,20 @@ omarchy plugin add https://github.com/cadiszu/animarchy.git --enable --yes
 
 This clones the repo to `~/.config/omarchy/plugins/animarchy/` and adds the widget to the bar (right section by default).
 
+> **Bar position:** `--yes` skips Omarchy's interactive prompts and takes the
+> manifest default (`right`). To pick left / center / right during install,
+> drop `--yes` — the installer will ask which section to place the widget in.
+
 Note the two names, because the CLI treats them differently:
 
 - `omarchy plugin ...` takes the **install directory**, `animarchy`.
 - `omarchy bar ...` takes the **plugin id** from the manifest, `io.github.cadiszu.animarchy`.
 
-So reposition the widget with the full id:
+So reposition the widget with the full id (works any time after install):
 
 ```bash
+omarchy bar move io.github.cadiszu.animarchy left
+omarchy bar move io.github.cadiszu.animarchy center
 omarchy bar move io.github.cadiszu.animarchy right
 ```
 
