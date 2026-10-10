@@ -9,7 +9,7 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "animarchy"
+  moduleName: "io.github.cadiszu.animarchy"
   manageIpc: false
 
   property var anchorItem: null
@@ -791,8 +791,17 @@ Panel {
     }
   }
 
+  // The bar tracks the widget mounted in its slot (BarWidget.qml), not this
+  // nested panel, so Tab navigation has to hand switchPanelFrom the bar
+  // identity. Ui/Panel's default passes `root`, which never matches a slot.
+  function switchPanel(direction) {
+    if (root.bar && typeof root.bar.switchPanelFrom === "function")
+      return root.bar.switchPanelFrom(root.barIdentity, direction)
+    return false
+  }
+
   IpcHandler {
-    target: "animarchy"
+    target: "io.github.cadiszu.animarchy"
 
     function open(): void { root.open() }
     function close(): void { root.close() }
