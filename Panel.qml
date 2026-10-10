@@ -526,16 +526,20 @@ Panel {
   Process {
     id: aniSkipProbe
     command: ["sh", "-c", "command -v ani-skip"]
-    onExited: function(code) {
-      root.aniSkipPresent = code === 0
-      root.probeDone = true
-    }
+    onExited: function(code) { root.aniSkipPresent = code === 0 }
   }
 
   Process {
     id: aniCliProbe
     command: ["sh", "-c", "command -v ani-cli"]
-    onExited: function(code) { root.aniCliPresent = code === 0 }
+    onExited: function(code) {
+      root.aniCliPresent = code === 0
+      // probeDone gates every "ani-cli is missing" message, so it must track
+      // this probe. Setting it from aniSkipProbe raced: a missing ani-skip
+      // exits first and flipped the flag while aniCliPresent was still its
+      // initial false, so resume reported ani-cli absent when it was present.
+      root.probeDone = true
+    }
   }
 
   // Launches a native directory picker and records the chosen folder.
