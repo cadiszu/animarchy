@@ -10,36 +10,36 @@ An Omarchy bar plugin for [ani-cli](https://github.com/pystardust/ani-cli): sear
 - **Episode range filter** — e.g. `5-100` narrows the grid; bulk download uses exactly what's shown
 - **Bulk download** — "Download all N episodes" button; saves to `<folder>/<Title>/` with mp4 + subtitles (popup stays open so progress/errors stay visible in the floating terminal)
 - **Settings (gear icon)** — English dub (falls back to sub when no dub source), Download mode, Skip intro, Next-ep countdown, quality selector, episode range, download folder (type or Browse…)
-- **Click-to-install** missing optional tools (ani-skip) from inside the panel
+- **Click-to-install** missing optional tools (`ani-cli`, `ani-skip`) from inside the panel
 - Long history titles get a scrolling marquee (pauses on hover); everything follows the active Omarchy theme
 
 ## Requirements
 
-- [ani-cli](https://github.com/pystardust/ani-cli) (`ani-cli` on AUR)
 - `mpv` (default player)
-- `python3` ( powers the search/episode resolver)
-- Optional: `ani-skip` (Skip intro toggle), `zenity` (folder Browse button), `yt-dlp`/`ffmpeg` (ani-cli downloads)
+- `python3` (powers the search/episode resolver)
 
-If `ani-cli` itself is missing, the popup shows an **Install ani-cli** button that installs it via `omarchy pkg aur add ani-cli`.
+Optional, each unlocking a specific feature:
+
+- [ani-cli](https://github.com/pystardust/ani-cli) (`ani-cli` on AUR) — required for **downloads** and **right-click resume**. Search, episode browsing, playback, and Play History run through the scraper vendored in `anicli-lib.sh` and work without it.
+- `ani-skip` (`ani-skip-git` on AUR) — the Skip intro toggle
+- `zenity` — the download-folder Browse button
+- `yt-dlp` / `ffmpeg` — downloads
+
+### One-click install
+
+Open the panel and both optional binaries are probed on the spot (`command -v`). Anything missing shows an **Install** button right there — ani-cli in the main panel, ani-skip under Settings. Each opens a floating terminal running `omarchy pkg aur add <package>`, so pacman output and any `sudo` prompt are visible rather than hidden. After it finishes the panel re-probes for about a minute and the button disappears on its own, so no restart is needed. Right-clicking the bar icon while ani-cli is absent opens the panel directly onto that banner.
+
+> These buttons install packages on your system and may ask for `sudo`. They only ever appear for a package that is actually missing.
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/cadiszu/animarchy.git --enable --yes
+omarchy plugin add https://github.com/cadiszu/animarchy.git --enable
 ```
 
-This clones the repo to `~/.config/omarchy/plugins/animarchy/` and adds the widget to the bar (right section by default).
+This clones the repo into `~/.config/omarchy/plugins/io.github.cadiszu.animarchy/` and then asks which bar section to use — **left**, **center**, or **right** — with `right` pre-selected.
 
-> **Bar position:** `--yes` skips Omarchy's interactive prompts and takes the
-> manifest default (`right`). To pick left / center / right during install,
-> drop `--yes` — the installer will ask which section to place the widget in.
-
-Note the two names, because the CLI treats them differently:
-
-- `omarchy plugin ...` takes the **install directory**, `animarchy`.
-- `omarchy bar ...` takes the **plugin id** from the manifest, `io.github.cadiszu.animarchy`.
-
-So reposition the widget with the full id (works any time after install):
+To move it afterwards:
 
 ```bash
 omarchy bar move io.github.cadiszu.animarchy left
@@ -47,15 +47,20 @@ omarchy bar move io.github.cadiszu.animarchy center
 omarchy bar move io.github.cadiszu.animarchy right
 ```
 
+> The install folder is named after the plugin id, so `omarchy plugin enable`,
+> `disable`, `update`, and `remove` all take `io.github.cadiszu.animarchy` too.
+>
+> Installing from a script, dotfiles bootstrap, or CI — anywhere without a
+> terminal to draw the prompts on — needs `--yes` as well, which takes the
+> `right` default without asking.
+
 ## Uninstall
 
 Remove the plugin itself:
 
 ```bash
-omarchy plugin remove animarchy --yes
+omarchy plugin remove io.github.cadiszu.animarchy
 ```
-
-(`remove` takes the install directory, not the plugin id.)
 
 Remove the companion tools it uses (keeps shared packages like `mpv`, `fzf`, `ffmpeg`, `yt-dlp`, `zenity`, and `python3`, which other software needs):
 
