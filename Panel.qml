@@ -900,10 +900,11 @@ Panel {
             }
 
             Button {
-              text: root.showSettings ? "✕" : "⚙"
+              text: ""
+              iconText: root.showSettings ? "\uf00d" : "\uf013"
               foreground: root.fg
               focusable: true
-              fontSize: Style.font.iconLarge
+              iconSize: Style.font.iconLarge
               horizontalPadding: Style.space(6)
               verticalPadding: Style.space(4)
               Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
