@@ -2,7 +2,11 @@
 # launch-mpv.sh <video_link> <referrer> <sub_link> <media_title>
 # Replaces any previously running media player started by this plugin,
 # so Next/Previous swaps the stream without leaving the old one playing.
-PIDFILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid"
+# Per-user runtime dir only, never /tmp: this path is predictable and the
+# contents drive a kill(), so a shared world-writable location would let
+# another local user symlink it and redirect the write or plant a pid.
+: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is required}"
+PIDFILE="$XDG_RUNTIME_DIR/omarchy-anicli-mpv.pid"
 if [ -f "$PIDFILE" ]; then
   old="$(cat "$PIDFILE" 2>/dev/null)"
   if [ -n "$old" ]; then

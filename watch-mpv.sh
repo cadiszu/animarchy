@@ -10,7 +10,9 @@
 # was still playing. It also skips a stale pid left by a previous episode,
 # which launch-mpv.sh is about to kill.
 
-PIDFILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/omarchy-anicli-mpv.pid"
+# Must match launch-mpv.sh, which requires the per-user runtime dir.
+: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is required}"
+PIDFILE="$XDG_RUNTIME_DIR/omarchy-anicli-mpv.pid"
 WAIT_MAX=${1:-180}
 # Safety valve only, kept well above any plausible playback length: if this
 # expires while an episode is still running, the footer stops auto-hiding.
